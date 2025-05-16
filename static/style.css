@@ -3,6 +3,15 @@ body {
     font-family: 'Segoe UI', sans-serif;
     background: #0f0f0f;
     color: #fff;
+    padding: 0;
+  margin: 0;
+  height: 100%;
+  overflow-x: hidden;
+  background-image: url("https://static.vecteezy.com/system/resources/thumbnails/027/809/549/small_2x/tooth-with-blue-background-3d-rendering-photo.jpg");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center center;
+  background-attachment: fixed;
   }
   h1 {
     color: #00fff7;
