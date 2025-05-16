@@ -1,0 +1,132 @@
+from flask import Flask, render_template, request, redirect, url_for, session
+from werkzeug.utils import secure_filename
+from PIL import Image
+import os
+import cv2
+import torch
+import numpy as np
+
+# --- Configuration ---
+app = Flask(__name__)
+app.secret_key = 'replace_with_a_random_secret_key'
+app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+# --- Load infection types & recommendations ---
+def load_infection_types(file_path='infection_types.txt'):
+    infections = {}
+    with open(file_path, 'r') as f:
+        for line in f:
+            if ':' in line:
+                name, rec = line.strip().split(':', 1)
+                infections[name.strip()] = rec.strip()
+    return infections
+
+infection_data = load_infection_types()
+
+# --- Helpers ---
+def allowed_file(filename):
+    return (
+        '.' in filename and
+        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    )
+
+def is_tooth_image(image_path):
+    """
+    Simple two‑check:
+      1) ≥15% of pixels are in the ‘tooth color’ HSV range
+      2) edge density ≥2%
+    """
+    img = cv2.imread(image_path)
+    if img is None:
+        return False
+
+    # 1) Color check
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    # H: 0–50 (white→yellow), S: 0–100 (low saturation), V: 200–255 (bright)
+    lower = np.array([0, 0, 200])
+    upper = np.array([50, 100, 255])
+    mask = cv2.inRange(hsv, lower, upper)
+    color_ratio = cv2.countNonZero(mask) / mask.size
+
+    # 2) Edge-density check
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 100, 200)
+    edge_ratio = np.count_nonzero(edges) / edges.size
+
+    return (color_ratio >= 0.15) and (edge_ratio >= 0.02)
+
+def detect_infection(image_path):
+    img = Image.open(image_path).convert('L')
+    w, h = img.size
+    pixels = img.load()
+    total = w * h
+    dark = sum(1 for x in range(w) for y in range(h) if pixels[x, y] < 128)
+    damage = round((dark / total) * 100, 2)
+
+    if damage < 10:
+        inf = 'healthy'
+    elif damage < 30:
+        inf = 'cavities'
+    elif damage < 50:
+        inf = 'enamel erosion'
+    elif damage < 70:
+        inf = 'gum infection'
+    elif damage < 90:
+        inf = 'abscess'
+    else:
+        inf = 'periodontal disease'
+
+    rec = infection_data.get(inf, 'No recommendation available.')
+    return inf, damage, rec
+
+# --- Routes ---
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        if (request.form['username']=='Mr. Dento' and
+            request.form['password']=='2211'):
+            session['logged_in'] = True
+            return redirect(url_for('upload'))
+        return render_template('login.html', error='Invalid credentials')
+    return render_template('login.html')
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if not file or file.filename == '':
+            return render_template('upload.html', error='No file selected')
+        if not allowed_file(file.filename):
+            return render_template('upload.html', error='Type not allowed')
+
+        filename = secure_filename(file.filename)
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(path)
+
+        # Tooth check
+        if not is_tooth_image(path):
+            os.remove(path)
+            return render_template(
+                'upload.html',
+                error="That doesn't look like a tooth. Please upload a clear tooth image."
+            )
+
+        # Detect infection & show recommendation
+        inf, dmg, rec = detect_infection(path)
+        return render_template(
+            'result.html',
+            infection=inf,
+            damage=dmg,
+            recommendation=rec,
+            filename=filename
+        )
+
+    return render_template('upload.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)

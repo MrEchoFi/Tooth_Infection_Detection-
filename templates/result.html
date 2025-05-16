@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Detection Result</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="result-body">
+  <div class="result-box">
+    <h1>Analysis Result</h1>
+    <img src="{{ url_for('static', filename='uploads/' ~ filename) }}" alt="Tooth Image" />
+    <p><strong>Infection:</strong> {{ infection }}</p>
+    <p><strong>Damage Percentage:</strong> {{ damage }}%</p>
+    <p><strong>Treatment Recommendation:</strong> {{ recommendation }}</p>
+    <a href="{{ url_for('upload') }}">Analyze Another</a>
+  </div>
+</body>
+</html>
